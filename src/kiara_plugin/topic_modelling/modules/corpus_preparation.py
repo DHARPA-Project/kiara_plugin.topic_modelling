@@ -131,11 +131,11 @@ class CorpusDistTime(KiaraModule):
                 "type": "string",
                 "doc": "The desired data periodicity to aggregate the data. Values can be either 'day','month' or 'year'."
             },
-            "time_column": {
+            "date_col_name": {
                 "type": "string",
                 "doc": "The column that contains the date, a list of compliant formats can be consulted here: https://docs.rs/chrono/latest/chrono/format/strftime/index.html."
             },
-            "title_column": {
+            "title_col_name": {
                 "type": "string",
                 "doc": "The column that contains publication names or ref/id."
             },
@@ -156,14 +156,14 @@ class CorpusDistTime(KiaraModule):
     def process(self, inputs, outputs) -> None:
 
         agg = inputs.get_value_obj("periodicity").data
-        title_col = inputs.get_value_obj("title_column").data
-        time_col = inputs.get_value_obj("time_column").data
+        title_col = inputs.get_value_obj("title_col_name").data
+        time_col = inputs.get_value_obj("date_col_name").data
         
-        table_obj = inputs.get_value_data("corpus_table")
-        pa_in_table = table_obj.arrow_table
+        table_obj = inputs.get_value_obj("corpus_table")
         
-        sources = pa_in_table.to_polars()
-        sources = sources.with_column(pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d"))
+        sources = pl.from_arrow(table_obj.data.arrow_table)
+
+        sources = sources.with_columns(pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d"))
 
         if agg == 'month':
             query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"
@@ -172,10 +172,8 @@ class CorpusDistTime(KiaraModule):
         elif agg == 'day':
             query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date"
 
-        queried_df = duckdb.query(query).to_polars()
+        queried_df = duckdb.query(query)
 
-        queried_df = queried_df.with_columns([pl.col(c).cast(pl.Utf8) for c in queried_df.columns])
-
-        pa_out_table = queried_df.to_arrow()
+        pa_out_table = queried_df.arrow()
         
         outputs.set_value("dist_table", pa_out_table)
