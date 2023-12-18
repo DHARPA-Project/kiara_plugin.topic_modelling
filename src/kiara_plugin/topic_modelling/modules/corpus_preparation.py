@@ -4,6 +4,7 @@ from kiara.api import KiaraModule
 import polars as pl
 import pyarrow as pa
 import re
+import duckdb
 
 
 class GetLCCNMetadata(KiaraModule):
@@ -109,3 +110,72 @@ class GetLCCNMetadata(KiaraModule):
             print(f"An error occurred: {e}")
 
         outputs.set_value("corpus_table", output_table)
+
+class CorpusDistTime(KiaraModule):
+    """
+    This module aggregates a table by day, month or year from a corpus table that contains a date column. It returns the distribution over time, which can be used for display purposes, such as visualization.
+
+    Dependencies:
+    - polars: https://www.pola.rs/
+    - pyarrow: https://arrow.apache.org/docs/python/
+    - duckdb: https://duckdb.org/
+    
+    """
+
+    _module_type_name = "topic_modelling.time_dist"
+
+    def create_inputs_schema(self):
+        
+        return {
+             "periodicity": {
+                "type": "string",
+                "doc": "The desired data periodicity to aggregate the data. Values can be either 'day','month' or 'year'."
+            },
+            "time_column": {
+                "type": "string",
+                "doc": "The column that contains the date, a list of compliant formats can be consulted here: https://docs.rs/chrono/latest/chrono/format/strftime/index.html."
+            },
+            "title_column": {
+                "type": "string",
+                "doc": "The column that contains publication names or ref/id."
+            },
+            "corpus_table": {
+                "type": "table",
+                "doc": "The corpus table for which the distribution over time is needed."
+            }
+        }
+
+    def create_outputs_schema(self):
+        return {
+            "dist_table": {
+                "type": "table",
+                "doc": "The aggregated data table."
+            }
+        }
+
+    def process(self, inputs, outputs) -> None:
+
+        agg = inputs.get_value_obj("periodicity").data
+        title_col = inputs.get_value_obj("title_column").data
+        time_col = inputs.get_value_obj("time_column").data
+        
+        table_obj = inputs.get_value_data("corpus_table")
+        pa_in_table = table_obj.arrow_table
+        
+        sources = pa_in_table.to_polars()
+        sources = sources.with_column(pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d"))
+
+        if agg == 'month':
+            query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"
+        elif agg == 'year':
+            query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)"
+        elif agg == 'day':
+            query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date"
+
+        queried_df = duckdb.query(query).to_polars()
+
+        queried_df = queried_df.with_columns([pl.col(c).cast(pl.Utf8) for c in queried_df.columns])
+
+        pa_out_table = queried_df.to_arrow()
+        
+        outputs.set_value("dist_table", pa_out_table)
