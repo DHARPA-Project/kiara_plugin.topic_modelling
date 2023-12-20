@@ -72,7 +72,7 @@ class GetLCCNMetadata(KiaraModule):
                 return ref_match[0]
             
             except Exception as e:
-                print(f"Error in get_ref: {e}")
+                print(f"Error in get_ref: {e}") # noqa
                 return None
 
         def get_date(file):
@@ -82,7 +82,7 @@ class GetLCCNMetadata(KiaraModule):
                     return None
                 return date_match[0]
             except Exception as e:
-                print(f"Error in get_date: {e}")
+                print(f"Error in get_date: {e}") # noqa
                 return None
 
         try:
@@ -92,7 +92,7 @@ class GetLCCNMetadata(KiaraModule):
             ])
         except Exception as e:
 
-            print(f"An error occurred while augmenting the dataframe: {e}")
+            print(f"An error occurred while augmenting the dataframe: {e}") # noqa
 
         try:
             if pub_refs and pub_names:
@@ -101,14 +101,14 @@ class GetLCCNMetadata(KiaraModule):
                     sources['publication_ref'].apply(lambda x: pub_ref_to_name.get(x, None)).alias('publication_name')
                 )
         except Exception as e:
-            print(e)
+            print(e) # noqa
             pass
 
         try:
             output_table = sources.to_arrow()
 
         except Exception as e:
-            print(f"An error occurred: {e}")
+            print(f"An error occurred: {e}") # noqa
 
         outputs.set_value("corpus_table", output_table)
 
