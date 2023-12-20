@@ -4,6 +4,7 @@ from kiara.api import KiaraModule
 import polars as pl
 import pyarrow as pa
 import re
+import duckdb
 
 
 class GetLCCNMetadata(KiaraModule):
@@ -71,7 +72,7 @@ class GetLCCNMetadata(KiaraModule):
                 return ref_match[0]
             
             except Exception as e:
-                print(f"Error in get_ref: {e}")
+                print(f"Error in get_ref: {e}") # noqa
                 return None
 
         def get_date(file):
@@ -81,7 +82,7 @@ class GetLCCNMetadata(KiaraModule):
                     return None
                 return date_match[0]
             except Exception as e:
-                print(f"Error in get_date: {e}")
+                print(f"Error in get_date: {e}") # noqa
                 return None
 
         try:
@@ -91,7 +92,7 @@ class GetLCCNMetadata(KiaraModule):
             ])
         except Exception as e:
 
-            print(f"An error occurred while augmenting the dataframe: {e}")
+            print(f"An error occurred while augmenting the dataframe: {e}") # noqa
 
         try:
             if pub_refs and pub_names:
@@ -100,13 +101,80 @@ class GetLCCNMetadata(KiaraModule):
                     sources['publication_ref'].apply(lambda x: pub_ref_to_name.get(x, None)).alias('publication_name')
                 )
         except Exception as e:
-            print(e)
+            print(e) # noqa
             pass
 
         try:
             output_table = sources.to_arrow()
 
         except Exception as e:
-            print(f"An error occurred: {e}")
+            print(f"An error occurred: {e}") # noqa
 
         outputs.set_value("corpus_table", output_table)
+
+class CorpusDistTime(KiaraModule):
+    """
+    This module aggregates a table by day, month or year from a corpus table that contains a date column. It returns the distribution over time, which can be used for display purposes, such as visualization.
+
+    Dependencies:
+    - polars: https://www.pola.rs/
+    - pyarrow: https://arrow.apache.org/docs/python/
+    - duckdb: https://duckdb.org/
+    
+    """
+
+    _module_type_name = "topic_modelling.time_dist"
+
+    def create_inputs_schema(self):
+        
+        return {
+             "periodicity": {
+                "type": "string",
+                "doc": "The desired data periodicity to aggregate the data. Values can be either 'day','month' or 'year'."
+            },
+            "date_col_name": {
+                "type": "string",
+                "doc": "Column name of the column that contains the date. Values in this column need to comply with date format: https://docs.rs/chrono/latest/chrono/format/strftime/index.html."
+            },
+            "title_col_name": {
+                "type": "string",
+                "doc": "Column name of the values containing publication names or ref/id. This column will be used in the output."
+            },
+            "corpus_table": {
+                "type": "table",
+                "doc": "The corpus table for which the distribution over time is needed."
+            }
+        }
+
+    def create_outputs_schema(self):
+        return {
+            "dist_table": {
+                "type": "table",
+                "doc": "The aggregated data table."
+            }
+        }
+
+    def process(self, inputs, outputs) -> None:
+
+        agg = inputs.get_value_obj("periodicity").data
+        title_col = inputs.get_value_obj("title_col_name").data
+        time_col = inputs.get_value_obj("date_col_name").data
+        
+        table_obj = inputs.get_value_obj("corpus_table")
+        
+        sources = pl.from_arrow(table_obj.data.arrow_table)
+
+        sources = sources.with_columns(pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d"))
+
+        if agg == 'month':
+            query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)" # noqa
+        elif agg == 'year':
+            query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)" # noqa
+        elif agg == 'day':
+            query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date" # noqa
+
+        queried_df = duckdb.query(query)
+
+        pa_out_table = queried_df.arrow()
+        
+        outputs.set_value("dist_table", pa_out_table)
