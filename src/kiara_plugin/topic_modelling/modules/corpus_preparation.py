@@ -134,11 +134,11 @@ class CorpusDistTime(KiaraModule):
             },
             "date_col_name": {
                 "type": "string",
-                "doc": "The column that contains the date, a list of compliant formats can be consulted here: https://docs.rs/chrono/latest/chrono/format/strftime/index.html."
+                "doc": "Column name of the column that contains the date. Values in this column need to comply with date format: https://docs.rs/chrono/latest/chrono/format/strftime/index.html."
             },
             "title_col_name": {
                 "type": "string",
-                "doc": "The column that contains publication names or ref/id."
+                "doc": "Column name of the values containing publication names or ref/id. This column will be used in the output."
             },
             "corpus_table": {
                 "type": "table",
