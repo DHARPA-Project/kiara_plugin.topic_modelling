@@ -167,11 +167,11 @@ class CorpusDistTime(KiaraModule):
         sources = sources.with_columns(pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d"))
 
         if agg == 'month':
-            query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"
+            query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)" # noqa
         elif agg == 'year':
-            query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)"
+            query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)" # noqa
         elif agg == 'day':
-            query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date"
+            query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date" # noqa
 
         queried_df = duckdb.query(query)
 
