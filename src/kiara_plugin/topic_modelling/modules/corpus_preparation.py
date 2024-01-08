@@ -130,6 +130,9 @@ class CorpusDistTime(KiaraModule):
         return {
              "periodicity": {
                 "type": "string",
+                "type_config": {
+                "allowed_strings": ["day", "month", "year"]
+            },
                 "doc": "The desired data periodicity to aggregate the data. Values can be either 'day','month' or 'year'."
             },
             "date_col_name": {
