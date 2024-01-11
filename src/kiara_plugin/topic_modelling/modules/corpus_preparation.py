@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from kiara.api import KiaraModule
+from kiara.exceptions import KiaraProcessingException
 import polars as pl
 import pyarrow as pa
 import re
@@ -72,8 +73,7 @@ class GetLCCNMetadata(KiaraModule):
                 return ref_match[0]
             
             except Exception as e:
-                print(f"Error in get_ref: {e}") # noqa
-                return None
+                raise KiaraProcessingException(e)
 
         def get_date(file):
             try:
@@ -82,8 +82,8 @@ class GetLCCNMetadata(KiaraModule):
                     return None
                 return date_match[0]
             except Exception as e:
-                print(f"Error in get_date: {e}") # noqa
-                return None
+                msg = f"Error in get_date: {e}"
+                raise KiaraProcessingException(msg)
 
         try:
             sources = sources.with_columns([
@@ -91,8 +91,8 @@ class GetLCCNMetadata(KiaraModule):
                 sources[column_name].apply(get_ref).alias('publication_ref')
             ])
         except Exception as e:
-
-            print(f"An error occurred while augmenting the dataframe: {e}") # noqa
+            msg = f"An error occurred while augmenting the dataframe: {e}"
+            raise KiaraProcessingException(msg)
 
         try:
             if pub_refs and pub_names:
@@ -101,14 +101,13 @@ class GetLCCNMetadata(KiaraModule):
                     sources['publication_ref'].apply(lambda x: pub_ref_to_name.get(x, None)).alias('publication_name')
                 )
         except Exception as e:
-            print(e) # noqa
-            pass
+            raise KiaraProcessingException(msg)
 
         try:
             output_table = sources.to_arrow()
 
         except Exception as e:
-            print(f"An error occurred: {e}") # noqa
+            raise KiaraProcessingException(e)
 
         outputs.set_value("corpus_table", output_table)
 
