@@ -1,0 +1,6 @@
+operation: topic_modelling.create_table_from_zenodo
+inputs:
+  doi: "4596345"
+  file_name: "ChroniclItaly_3.0_original.zip"
+save:
+  corpus_table: "zenodo_corpus_table"
