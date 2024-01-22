@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import re
+
+import duckdb
+import polars as pl
+
 from kiara.api import KiaraModule
 from kiara.exceptions import KiaraProcessingException
-import polars as pl
-import pyarrow as pa
-import re
-import duckdb
 
 
 class GetLCCNMetadata(KiaraModule):
@@ -32,25 +33,25 @@ class GetLCCNMetadata(KiaraModule):
             },
             "file_name_col": {
                 "type": "string",
-                "doc": "The column containing file names with metadata. In order to work, file names need to comply with LCCN pattern '/sn86069873/1900-01-05/' containing publication reference and date."
+                "doc": "The column containing file names with metadata. In order to work, file names need to comply with LCCN pattern '/sn86069873/1900-01-05/' containing publication reference and date.",
             },
             "map": {
                 "type": "list",
                 "doc": "List of lists of unique publications references and publication names in the collection provided in the same order.",
                 "optional": True,
-            }
+            },
         }
 
     def create_outputs_schema(self):
         return {
             "corpus_table": {
                 "type": "table",
-                "doc": "Augmented table containing extracted metadata."
+                "doc": "Augmented table containing extracted metadata.",
             }
         }
 
     def process(self, inputs, outputs) -> None:
-        
+
         table_obj = inputs.get_value_obj("corpus_table")
         column_name = inputs.get_value_obj("file_name_col").data
         pub_refs, pub_names = None, None
@@ -59,25 +60,24 @@ class GetLCCNMetadata(KiaraModule):
             pub_refs = inputs.get_value_obj("map").data[0]
             pub_names = inputs.get_value_obj("map").data[1]
 
-        except Exception as e:
-            pass;
-
+        except Exception:
+            pass
 
         sources = pl.from_arrow(table_obj.data.arrow_table)
 
         def get_ref(file):
             try:
-                ref_match = re.findall(r'(\w+\d+)_\d{4}-\d{2}-\d{2}_',file)
+                ref_match = re.findall(r"(\w+\d+)_\d{4}-\d{2}-\d{2}_", file)
                 if not ref_match:
                     return None
                 return ref_match[0]
-            
+
             except Exception as e:
                 raise KiaraProcessingException(e)
 
         def get_date(file):
             try:
-                date_match = re.findall(r'_(\d{4}-\d{2}-\d{2})_',file)
+                date_match = re.findall(r"_(\d{4}-\d{2}-\d{2})_", file)
                 if not date_match:
                     return None
                 return date_match[0]
@@ -86,10 +86,12 @@ class GetLCCNMetadata(KiaraModule):
                 raise KiaraProcessingException(msg)
 
         try:
-            sources = sources.with_columns([
-                sources[column_name].apply(get_date).alias('date'),
-                sources[column_name].apply(get_ref).alias('publication_ref')
-            ])
+            sources = sources.with_columns(
+                [
+                    sources[column_name].apply(get_date).alias("date"),
+                    sources[column_name].apply(get_ref).alias("publication_ref"),
+                ]
+            )
         except Exception as e:
             msg = f"An error occurred while augmenting the dataframe: {e}"
             raise KiaraProcessingException(msg)
@@ -98,9 +100,11 @@ class GetLCCNMetadata(KiaraModule):
             if pub_refs and pub_names:
                 pub_ref_to_name = dict(zip(pub_refs, pub_names))
                 sources = sources.with_columns(
-                    sources['publication_ref'].apply(lambda x: pub_ref_to_name.get(x, None)).alias('publication_name')
+                    sources["publication_ref"]
+                    .apply(lambda x: pub_ref_to_name.get(x, None))
+                    .alias("publication_name")
                 )
-        except Exception as e:
+        except Exception:
             raise KiaraProcessingException(msg)
 
         try:
@@ -111,6 +115,7 @@ class GetLCCNMetadata(KiaraModule):
 
         outputs.set_value("corpus_table", output_table)
 
+
 class CorpusDistTime(KiaraModule):
     """
     This module aggregates a table by day, month or year from a corpus table that contains a date column. It returns the distribution over time, which can be used for display purposes, such as visualization.
@@ -119,64 +124,59 @@ class CorpusDistTime(KiaraModule):
     - polars: https://www.pola.rs/
     - pyarrow: https://arrow.apache.org/docs/python/
     - duckdb: https://duckdb.org/
-    
+
     """
 
     _module_type_name = "topic_modelling.time_dist"
 
     def create_inputs_schema(self):
-        
+
         return {
-             "periodicity": {
+            "periodicity": {
                 "type": "string",
-                "type_config": {
-                "allowed_strings": ["day", "month", "year"]
-            },
-                "doc": "The desired data periodicity to aggregate the data. Values can be either 'day','month' or 'year'."
+                "type_config": {"allowed_strings": ["day", "month", "year"]},
+                "doc": "The desired data periodicity to aggregate the data. Values can be either 'day','month' or 'year'.",
             },
             "date_col_name": {
                 "type": "string",
-                "doc": "Column name of the column that contains the date. Values in this column need to comply with date format: https://docs.rs/chrono/latest/chrono/format/strftime/index.html."
+                "doc": "Column name of the column that contains the date. Values in this column need to comply with date format: https://docs.rs/chrono/latest/chrono/format/strftime/index.html.",
             },
             "title_col_name": {
                 "type": "string",
-                "doc": "Column name of the values containing publication names or ref/id. This column will be used in the output."
+                "doc": "Column name of the values containing publication names or ref/id. This column will be used in the output.",
             },
             "corpus_table": {
                 "type": "table",
-                "doc": "The corpus table for which the distribution over time is needed."
-            }
+                "doc": "The corpus table for which the distribution over time is needed.",
+            },
         }
 
     def create_outputs_schema(self):
-        return {
-            "dist_table": {
-                "type": "table",
-                "doc": "The aggregated data table."
-            }
-        }
+        return {"dist_table": {"type": "table", "doc": "The aggregated data table."}}
 
     def process(self, inputs, outputs) -> None:
 
         agg = inputs.get_value_obj("periodicity").data
         title_col = inputs.get_value_obj("title_col_name").data
         time_col = inputs.get_value_obj("date_col_name").data
-        
+
         table_obj = inputs.get_value_obj("corpus_table")
-        
+
         sources = pl.from_arrow(table_obj.data.arrow_table)
 
-        sources = sources.with_columns(pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d"))
+        sources = sources.with_columns(
+            pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d")
+        )
 
-        if agg == 'month':
-            query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)" # noqa
-        elif agg == 'year':
-            query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)" # noqa
-        elif agg == 'day':
-            query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date" # noqa
+        if agg == "month":
+            query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"  # noqa
+        elif agg == "year":
+            query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)"  # noqa
+        elif agg == "day":
+            query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date"  # noqa
 
         queried_df = duckdb.query(query)
 
         pa_out_table = queried_df.arrow()
-        
+
         outputs.set_value("dist_table", pa_out_table)
