@@ -1,6 +1,5 @@
-operation: topic_modelling.create_table_from_zenodo
+operation: import.local.file_bundle
 inputs:
-  doi: "4596345"
-  file_name: "ChroniclItaly_3.0_original.zip"
+  path: "${this_dir}/../data/text_corpus/data"
 save:
-  corpus_table: "zenodo_corpus_table"
+  import_local_file_bundle__file_bundle: "corpus_table"
