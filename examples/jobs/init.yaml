@@ -1,5 +1,8 @@
-operation: import.local.file_bundle
+operation: "${this_dir}/../pipelines/init.yaml"
 inputs:
-  path: "${this_dir}/../data/text_corpus/data"
+  load_text_files__path: "${this_dir}/../data/text_corpus/data"
+  get_lccn_metadata__file_name_col: "file_name"
+  get_lccn_metadata__map: [["2012271201","sn85054967","sn93053873","sn85066408","sn85055164","sn84037024","sn84037025","sn84020351","sn86092310","sn92051386"],["Cronaca_Sovversiva","Il_Patriota","L'Indipendente","L'Italia","La_Libera_Parola","La_Ragione","La_Rassegna","La_Sentinella","La_Sentinella_del_West","La_Tribuna_del_Connecticut"]]
 save:
-  import_local_file_bundle__file_bundle: "corpus_table"
+  create_table__table: "corpus_table"
+  get_lccn_metadata__corpus_table: "viz_table"
