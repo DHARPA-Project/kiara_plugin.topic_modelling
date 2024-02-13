@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import re
-
-import duckdb
-import polars as pl
-
 from kiara.api import KiaraModule
 from kiara.exceptions import KiaraProcessingException
-
 
 class GetLCCNMetadata(KiaraModule):
     """
@@ -47,6 +41,9 @@ class GetLCCNMetadata(KiaraModule):
         }
 
     def process(self, inputs, outputs) -> None:
+        import re
+        import polars as pl
+
 
         table_obj = inputs.get_value_obj("corpus_table")
         column_name = inputs.get_value_obj("file_name_col").data
@@ -151,6 +148,8 @@ class CorpusDistTime(KiaraModule):
         return {"dist_table": {"type": "table", "doc": "The aggregated data table."}}
 
     def process(self, inputs, outputs) -> None:
+        import duckdb
+        import polars as pl
 
         agg = inputs.get_value_obj("periodicity").data
         title_col = inputs.get_value_obj("title_col_name").data
