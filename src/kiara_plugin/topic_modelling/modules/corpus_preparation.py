@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-
 from kiara.api import KiaraModule
 from kiara.exceptions import KiaraProcessingException
+from typing import TYPE_CHECKING, Any, Mapping, Union
 
 class GetLCCNMetadata(KiaraModule):
     """
@@ -44,19 +44,30 @@ class GetLCCNMetadata(KiaraModule):
         import re
         import polars as pl
 
-
         table_obj = inputs.get_value_obj("corpus_table")
         column_name = inputs.get_value_obj("file_name_col").data
+        
+        # optional inputs
         pub_refs, pub_names = None, None
 
-        try:
-            pub_refs = inputs.get_value_obj("map").data[0]
-            pub_names = inputs.get_value_obj("map").data[1]
+        if not column_name:
+            raise KiaraProcessingException("No file name column name provided.")
+        
+        if table_obj.is_set:
 
-        except Exception:
-            pass
+            sources: Union[KiaraTable, None] = table_obj.data
+            assert sources is not None
 
-        sources = pl.from_arrow(table_obj.data.arrow_table)
+            sources_col_names = sources.column_names
+
+            if column_name not in sources_col_names:
+
+                raise KiaraProcessingException(
+                    f"Could not find file names column '{column_name}' in the table. Please specify a valid column name manually, using one of: {', '.join(sources_col_names)}"
+                )
+
+            sources = pl.from_arrow(table_obj.data.arrow_table)
+
 
         def get_ref(file):
             try:
@@ -78,27 +89,31 @@ class GetLCCNMetadata(KiaraModule):
                 msg = f"Error in get_date: {e}"
                 raise KiaraProcessingException(msg)
 
+        
         try:
-            sources = sources.with_columns(
-                [
-                    sources[column_name].apply(get_date).alias("date"),
-                    sources[column_name].apply(get_ref).alias("publication_ref"),
-                ]
-            )
-        except Exception as e:
-            msg = f"An error occurred while augmenting the dataframe: {e}"
-            raise KiaraProcessingException(msg)
+            pub_refs: list[str] = inputs.get_value_obj("map").data[0]
+            pub_names: list[str] = inputs.get_value_obj("map").data[1]
 
-        try:
-            if pub_refs and pub_names:
-                pub_ref_to_name = dict(zip(pub_refs, pub_names))
-                sources = sources.with_columns(
+            pub_ref_to_name = dict(zip(pub_refs, pub_names))
+            
+            sources = sources.with_columns(
                     sources["publication_ref"]
-                    .apply(lambda x: pub_ref_to_name.get(x, None))
+                    .map_elements(lambda x: pub_ref_to_name.get(x, None))
                     .alias("publication_name")
                 )
+
         except Exception:
-            raise KiaraProcessingException(msg)
+            try:
+                sources = sources.with_columns(
+                    [
+                        sources[column_name].map_elements(get_date).alias("date"),
+                        sources[column_name].map_elements(get_ref).alias("publication_ref"),
+                    ]
+                )
+
+            except Exception as e:
+                msg = f"An error occurred while augmenting the dataframe: {e}"
+                raise KiaraProcessingException(msg)
 
         try:
             output_table = sources.to_arrow()
