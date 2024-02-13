@@ -17,10 +17,6 @@ class GetLCCNMetadata(KiaraModule):
     Here is an example of how it should look:
     [["2012271201","sn85054967","sn93053873"],["Cronaca_Sovversiva","Il_Patriota","L'Indipendente"]]
 
-    Dependencies:
-    - polars: https://www.pola.rs/
-    - pyarrow: https://arrow.apache.org/docs/python/
-    - re: https://docs.python.org/3/library/re.html
     """
 
     _module_type_name = "topic_modelling.get_lccn_metadata"
