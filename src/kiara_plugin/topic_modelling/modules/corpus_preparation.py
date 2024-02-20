@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from kiara.api import KiaraModule
 from kiara.exceptions import KiaraProcessingException
-from typing import TYPE_CHECKING, Any, Mapping, Union
+from kiara_plugin.tabular.models.table import KiaraTable
+from typing import Union, Any
 
 class GetLCCNMetadata(KiaraModule):
     """
@@ -43,19 +44,18 @@ class GetLCCNMetadata(KiaraModule):
     def process(self, inputs, outputs) -> None:
         import re
         import polars as pl
+        import pyarrow as pa
 
         table_obj = inputs.get_value_obj("corpus_table")
         column_name = inputs.get_value_obj("file_name_col").data
-        
-        # optional inputs
-        pub_refs, pub_names = None, None
 
         if not column_name:
             raise KiaraProcessingException("No file name column name provided.")
         
         if table_obj.is_set:
 
-            sources: Union[KiaraTable, None] = table_obj.data
+            sources: Union[pa.Table, None] = table_obj.data
+            
             assert sources is not None
 
             sources_col_names = sources.column_names
@@ -65,8 +65,10 @@ class GetLCCNMetadata(KiaraModule):
                 raise KiaraProcessingException(
                     f"Could not find file names column '{column_name}' in the table. Please specify a valid column name manually, using one of: {', '.join(sources_col_names)}"
                 )
-
-            sources = pl.from_arrow(table_obj.data.arrow_table)
+            
+            sources_data: pa.Table = table_obj.data.arrow_table
+            
+            sources_tb: pl.DataFrame = pl.from_arrow(sources_data) # type: ignore
 
 
         def get_ref(file):
@@ -91,23 +93,24 @@ class GetLCCNMetadata(KiaraModule):
 
         
         try:
+            
             pub_refs: list[str] = inputs.get_value_obj("map").data[0]
             pub_names: list[str] = inputs.get_value_obj("map").data[1]
 
             pub_ref_to_name = dict(zip(pub_refs, pub_names))
             
-            sources = sources.with_columns(
-                    sources["publication_ref"]
-                    .map_elements(lambda x: pub_ref_to_name.get(x, None))
+            augm_sources = sources_tb.with_columns(
+                    sources_tb["publication_ref"]
+                    .map_elements(lambda x: pub_ref_to_name.get(x))
                     .alias("publication_name")
                 )
 
-        except Exception:
+        except:
             try:
-                sources = sources.with_columns(
+                augm_sources = sources_tb.with_columns(
                     [
-                        sources[column_name].map_elements(get_date).alias("date"),
-                        sources[column_name].map_elements(get_ref).alias("publication_ref"),
+                        sources_tb[column_name].map_elements(get_date).alias("date"),
+                        sources_tb[column_name].map_elements(get_ref).alias("publication_ref"),
                     ]
                 )
 
@@ -116,7 +119,7 @@ class GetLCCNMetadata(KiaraModule):
                 raise KiaraProcessingException(msg)
 
         try:
-            output_table = sources.to_arrow()
+            output_table = augm_sources.to_arrow()
 
         except Exception as e:
             raise KiaraProcessingException(e)
