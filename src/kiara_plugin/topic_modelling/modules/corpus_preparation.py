@@ -212,7 +212,7 @@ class CorpusDistTime(KiaraModule):
             sources_tb: pl.DataFrame = pl.from_arrow(sources_data) # type: ignore
 
             try:
-                sources_tb = sources.with_columns(
+                sources_tb = sources_tb.with_columns(
                     pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d")
                 )
 
@@ -222,11 +222,11 @@ class CorpusDistTime(KiaraModule):
                 )
 
             if agg == "month":
-                query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"  # noqa
+                query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources_tb GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"  # noqa
             elif agg == "year":
-                query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)"  # noqa
+                query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources_tb GROUP BY {title_col}, EXTRACT(YEAR FROM date)"  # noqa
             elif agg == "day":
-                query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date"  # noqa
+                query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources_tb GROUP BY {title_col}, date"  # noqa
             
             else:
                 raise KiaraProcessingException(
