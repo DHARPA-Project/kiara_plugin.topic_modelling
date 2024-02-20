@@ -1,0 +1,6 @@
+operation: topic_modelling.time_dist
+inputs:
+  corpus_table: "augmented_table"
+  periodicity: "month"
+  date_col_name: "date"
+  title_col_name: "publication_ref"
