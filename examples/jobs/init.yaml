@@ -3,6 +3,10 @@ inputs:
   load_text_files__path: "${this_dir}/../data/text_corpus/data"
   get_lccn_metadata__file_name_col: "file_name"
   get_lccn_metadata__map: [["2012271201","sn85054967","sn93053873","sn85066408","sn85055164","sn84037024","sn84037025","sn84020351","sn86092310","sn92051386"],["Cronaca_Sovversiva","Il_Patriota","L'Indipendente","L'Italia","La_Libera_Parola","La_Ragione","La_Rassegna","La_Sentinella","La_Sentinella_del_West","La_Tribuna_del_Connecticut"]]
+  corpus_distribution__periodicity: "month"
+  corpus_distribution__date_col_name: "date"
+  corpus_distribution__title_col_name: "publication_ref"
 save:
   create_table__table: "corpus_table"
-  get_lccn_metadata__corpus_table: "viz_table"
+  get_lccn_metadata__corpus_table: "augmented_table"
+  corpus_distribution__dist_table: "dist_table"

@@ -16,3 +16,9 @@ steps:
       step_id: get_lccn_metadata
       input_links:
         corpus_table: create_table.table
+    - module_type: topic_modelling.time_dist
+      step_id: corpus_distribution
+      input_links:
+        corpus_table: get_lccn_metadata.corpus_table
+
+
