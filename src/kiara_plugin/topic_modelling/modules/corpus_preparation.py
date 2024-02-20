@@ -4,6 +4,7 @@ from kiara.exceptions import KiaraProcessingException
 from kiara_plugin.tabular.models.table import KiaraTable
 from typing import Union, Any
 
+
 class GetLCCNMetadata(KiaraModule):
     """
     This module will get metadata from strings that comply with LCCN pattern: '/sn86069873/1900-01-05/' to get the publication references and the dates and add those informations as two new columns.
@@ -51,6 +52,9 @@ class GetLCCNMetadata(KiaraModule):
 
         if not column_name:
             raise KiaraProcessingException("No file name column name provided.")
+        
+        if not table_obj:
+            raise KiaraProcessingException("No table provided.")
         
         if table_obj.is_set:
 
@@ -130,12 +134,7 @@ class GetLCCNMetadata(KiaraModule):
 class CorpusDistTime(KiaraModule):
     """
     This module aggregates a table by day, month or year from a corpus table that contains a date column. It returns the distribution over time, which can be used for display purposes, such as visualization.
-
-    Dependencies:
-    - polars: https://www.pola.rs/
-    - pyarrow: https://arrow.apache.org/docs/python/
-    - duckdb: https://duckdb.org/
-
+    
     """
 
     _module_type_name = "topic_modelling.time_dist"
@@ -166,30 +165,81 @@ class CorpusDistTime(KiaraModule):
         return {"dist_table": {"type": "table", "doc": "The aggregated data table."}}
 
     def process(self, inputs, outputs) -> None:
+        
         import duckdb
         import polars as pl
+        import pyarrow as pa
 
         agg = inputs.get_value_obj("periodicity").data
         title_col = inputs.get_value_obj("title_col_name").data
         time_col = inputs.get_value_obj("date_col_name").data
-
         table_obj = inputs.get_value_obj("corpus_table")
 
-        sources = pl.from_arrow(table_obj.data.arrow_table)
+        if not agg:
+            raise KiaraProcessingException("No periodicity provided.")
+        
+        if not title_col:
+            raise KiaraProcessingException("No column name provided for titles id/ref.")
+        
+        if not time_col:
+            raise KiaraProcessingException("No column name provided for date.")
+        
+        if not table_obj:
+            raise KiaraProcessingException("No table provided.")
+        
+        if table_obj.is_set:
 
-        sources = sources.with_columns(
-            pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d")
-        )
+            sources: Union[pa.Table, None] = table_obj.data
+            
+            assert sources is not None
 
-        if agg == "month":
-            query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"  # noqa
-        elif agg == "year":
-            query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)"  # noqa
-        elif agg == "day":
-            query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date"  # noqa
+            sources_col_names = sources.column_names
 
-        queried_df = duckdb.query(query)
+            if title_col not in sources_col_names:
 
-        pa_out_table = queried_df.arrow()
+                raise KiaraProcessingException(
+                    f"Could not find title name/id column '{title_col}' in the table. Please specify a valid column name manually, using one of: {', '.join(sources_col_names)}"
+                )
+            
+            if time_col not in sources_col_names:
 
-        outputs.set_value("dist_table", pa_out_table)
+                raise KiaraProcessingException(
+                    f"Could not find date column '{time_col}' in the table. Please specify a valid column name manually, using one of: {', '.join(sources_col_names)}"
+                )
+            
+            sources_data: pa.Table = table_obj.data.arrow_table
+            
+            sources_tb: pl.DataFrame = pl.from_arrow(sources_data) # type: ignore
+
+            try:
+                sources_tb = sources.with_columns(
+                    pl.col(time_col).str.strptime(pl.Date, "%Y-%m-%d")
+                )
+
+            except:
+                raise KiaraProcessingException(
+                    f"Could not convert time column to a valid date format. Please check the pattern of source values."
+                )
+
+            if agg == "month":
+                query = f"SELECT EXTRACT(MONTH FROM date) AS month, EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)"  # noqa
+            elif agg == "year":
+                query = f"SELECT EXTRACT(YEAR FROM date) AS year, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, EXTRACT(YEAR FROM date)"  # noqa
+            elif agg == "day":
+                query = f"SELECT date, {title_col}, COUNT(*) as count FROM sources GROUP BY {title_col}, date"  # noqa
+            
+            else:
+                raise KiaraProcessingException(
+                    f'Please check the value chosen for periodicity. Supported values are "day", "month" or "year"'
+                )
+
+            queried_df = duckdb.query(query)
+
+            pa_out_table = queried_df.arrow()
+
+            outputs.set_value("dist_table", pa_out_table)
+        
+        else:
+           raise KiaraProcessingException(
+                    f"Table value could not be set."
+                ) 
