@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+from kiara.exceptions import KiaraProcessingException
 from kiara.api import KiaraModule
 import urllib.request
 import zipfile
@@ -68,8 +68,7 @@ class CreateTableFromUrl(KiaraModule):
             outputs.set_value("corpus_table", pa_table)
 
         except Exception as e:
-            # Print exception details
-            print(f"An error occurred: {e}")
+            raise KiaraProcessingException(e)
 
         
 class CreateTableFromZenodo(KiaraModule):

@@ -1,0 +1,5 @@
+operation: topic_modelling.get_lccn_metadata
+inputs:
+  corpus_table: "corpus_table"
+  file_name_col: "file_name"
+  map: [["2012271201","sn85054967","sn93053873","sn85066408","sn85055164","sn84037024","sn84037025","sn84020351","sn86092310","sn92051386"],["Cronaca_Sovversiva","Il_Patriota","L'Indipendente","L'Italia","La_Libera_Parola","La_Ragione","La_Rassegna","La_Sentinella","La_Sentinella_del_West","La_Tribuna_del_Connecticut"]]
