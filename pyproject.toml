@@ -53,6 +53,7 @@ dependencies = [
     "kiara-plugin.tabular>=0.5.1,<0.6.0",
     "types-requests==2.31.0.20240406",
     "nltk==3.8.1",
+    "gensim==4.3.2",
 ]
 dynamic = ["version"]
 
