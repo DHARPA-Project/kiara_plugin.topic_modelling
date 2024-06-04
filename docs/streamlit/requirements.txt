@@ -1,0 +1,7 @@
+streamlit==1.34.0
+kiara==0.5.10
+kiara_plugin.core_types==0.5.1
+kiara_plugin.develop==0.5.2
+kiara_plugin.onboarding==0.5.1
+kiara_plugin.tabular==0.5.4
+git+https://github.com/DHARPA-Project/kiara_plugin.topic_modelling
