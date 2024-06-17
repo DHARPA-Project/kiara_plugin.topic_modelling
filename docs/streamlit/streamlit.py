@@ -1,8 +1,20 @@
 import streamlit as st
 from kiara.api import KiaraAPI
 
-
 kiara = KiaraAPI.instance()
+
+if 'ob_local_submitted' not in st.session_state:
+    st.session_state.ob_local_submitted = False
+
+if 'ob_local_files_res_submitted' not in st.session_state:
+    st.session_state.ob_local_files_res_submitted = False
+
+def ob_local_submitted_clicked():
+    st.session_state.ob_local_submitted = True
+
+def ob_local_files_res_clicked():
+    st.session_state.ob_local_files_res_submitted = True
+
 
 #with st.sidebar:
     # mettre un formulaire pour le data lineage
@@ -33,11 +45,11 @@ with tab_ob_local:
             key="ob-local-files-comment",
         )
 
-    ob_local_submitted = ob_local_files_form.form_submit_button("Confirm")
+    ob_local_submitted = ob_local_files_form.form_submit_button("Confirm", on_click=ob_local_submitted_clicked)
 
     ##### Run operation #####
 
-    if ob_local_submitted == True:
+    if st.session_state.ob_local_submitted:
         
         ob_local_file_bundle_gh_inputs = {
         "path": local_folder_path,
@@ -46,31 +58,32 @@ with tab_ob_local:
         try:
             ob_local_file_bundle_results = kiara.run_job('import.table.from.local_folder_path', inputs=ob_local_file_bundle_gh_inputs, comment=ob_local_files_comment)
             ob_local_file_bundle_results_data = ob_local_file_bundle_results['table'].data
-        
-            #### Display results ####
-            ob_local_files_res = st.form(key="ob_local_files_res")
-
-            ob_local_files_res.write("Check the result in display preview below and name the table before confirming to add it to the data store.")
-
-            ob_local_files_name = ob_local_files_res.text_input(
-                    "Name:",
-                    "my_data_item_name",
-                    key="ob-save-table-name",
-                )
-            
-            ob_local_files_res_submitted = ob_local_files_res.form_submit_button("Submit")
-
-            if ob_local_files_res_submitted == True:
-                kiara.store_value(ob_local_file_bundle_results['table'].data, ob_local_files_name)
-                st.write("Data item added to the data store.")
-
-            with ob_local_files_res.expander("Display preview"):
-                st.dataframe(ob_local_file_bundle_results_data.to_pandas_dataframe())
- 
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
+        
+        #### Display results ####
+        ob_local_files_res = st.form(key="ob_local_files_res")
 
+        ob_local_files_res.write("Check the result in display preview below and name the table before confirming to add it to the data store.")
+
+        ob_local_files_name = ob_local_files_res.text_input(
+                "Name:",
+                "my_data_item_name",
+                key="ob-save-table-name",
+            )
+        
+        ob_local_files_res_submitted = ob_local_files_res.form_submit_button("Save to data store", on_click=ob_local_files_res_clicked)
+
+        if st.session_state.ob_local_files_res_submitted:
+            try:
+                kiara.store_value(ob_local_file_bundle_results['table'], ob_local_files_name)
+                ob_local_files_res.write("Data item added to the data store.")
+            except Exception as e:
+                ob_local_files_res.error(f"An error occurred: {e}")
+
+        with ob_local_files_res.expander("Display preview"):
+            st.dataframe(ob_local_file_bundle_results_data.to_pandas_dataframe())
 
 
 with tab_ob_github:
