@@ -16,9 +16,36 @@ def ob_local_files_res_clicked():
     st.session_state.ob_local_files_res_submitted = True
 
 
-#with st.sidebar:
-    # mettre un formulaire pour le data lineage
-    # mettre un formulaire pour explication operation
+with st.sidebar:
+    st.header("Data lineage")
+    st.write("Select an element of your data store to view its lineage.")
+    store_items = []
+    store_content = kiara.retrieve_values_info().dict()
+    
+    for item_id, item in store_content['item_infos'].items():
+        store_item = {}
+        store_item['value_created'] = item['value_created']
+        store_item['type'] = item['value_schema']['type']
+        store_item['value_size'] = item['value_size']
+        store_item['aliases'] = item['aliases']
+        store_items.append(store_item)
+
+    sb_data_store_form = st.form(key="sb_data_store_form")
+    aliases_list = [alias for item in store_items for alias in item.get("aliases", [])]
+    
+    alias_form = sb_data_store_form.multiselect(label="Select data", options=aliases_list)
+
+    # if alias_form:
+
+
+
+    
+ 
+
+
+    # data store
+    # data lineage
+    # operations
 
 st.header("Data Onboarding")
 
