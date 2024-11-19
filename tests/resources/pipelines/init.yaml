@@ -43,7 +43,7 @@ steps:
       step_id: get_bigrams
       input_links:
         tokens_array: remove_stopwords.tokens_array
-    - module_type: topic_modelling.lda
+    - module_type: topic_modelling.lda_extended_params
       step_id: lda
       input_links:
         tokens_array: get_bigrams.tokens_array
