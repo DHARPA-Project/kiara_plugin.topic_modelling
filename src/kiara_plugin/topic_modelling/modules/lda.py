@@ -139,7 +139,7 @@ class RunLdaCoherence(KiaraModule):
     
     """
 
-    _module_type_name = "topic_modelling.lda_parameters"
+    _module_type_name = "topic_modelling.lda_extended_params"
 
     def create_inputs_schema(self):
         return {
@@ -192,7 +192,6 @@ class RunLdaCoherence(KiaraModule):
                 "type": "float",
                 "doc": "Topics with a probability lower than this threshold will be filtered out.",
                 "optional": True,
-                "default": False
             },
             "alpha": {
                 "type": "boolean",
@@ -210,7 +209,6 @@ class RunLdaCoherence(KiaraModule):
                 "type": "float",
                 "doc": "Threshold for the gamma values.",
                 "optional": True,
-                "default": False
             },
         }
 
@@ -254,8 +252,6 @@ class RunLdaCoherence(KiaraModule):
         alpha = inputs.get_value_data("alpha")
         eta = inputs.get_value_data("eta")
         gamma_threshold = inputs.get_value_data("gamma_threshold")
-
-        print(f"eta: {eta}")
 
 
         # optional arguments for LDA
