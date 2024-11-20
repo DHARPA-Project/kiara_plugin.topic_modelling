@@ -21,42 +21,36 @@ class RunLda(KiaraModule):
                 "type": "integer",
                 "doc": "Remove tokens that appear in less than no_below documents.",
                 "optional": True,
-                "default": False
             },
             "no_above": {
                 "type": "integer",
                 "doc": "Remove tokens that appear in more than no_above documents.",
                 "optional": True,
-                "default": False
             },
             "num_topics": {
                 "type": "integer",
                 "doc": "Number of topics to process.",
-                "optional": False,
+                "optional": True,
             },
             "passes": {
                 "type": "integer",
                 "doc": "Number of passes.",
                 "optional": True,
-                "default": False
             },
             "chunksize": {
                 "type": "integer",
                 "doc": "Chunksize.",
                 "optional": True,
-                "default": False
             },
              "iterations": {
                 "type": "integer",
                 "doc": "Number of iterations.",
                 "optional": True,
-                "default": False
             },
              "random_state": {
                 "type": "integer",
                 "doc": "Random state.",
                 "optional": True,
-                "default": False
             },
         }
 
@@ -76,61 +70,67 @@ class RunLda(KiaraModule):
 
         import gensim  # type: ignore
         from gensim import corpora # type: ignore
+        import numpy as np  # type: ignore
 
         tokens_array = inputs.get_value_data("tokens_array")
-        tokens_array_pa = tokens_array.arrow_array
-        tokens_list = tokens_array_pa.to_pylist()
+        tokens_list = tokens_array.arrow_array.to_pylist()
         
-        no_below = inputs.get_value_data("no_below")
-        no_above = inputs.get_value_data("no_above")
+        input_values = {
+            "num_topics": inputs.get_value_data("num_topics"),
+            "passes": inputs.get_value_data("passes"),
+            "chunksize": inputs.get_value_data("chunksize"),
+            "iterations": inputs.get_value_data("iterations"),
+            "random_state": inputs.get_value_data("random_state")
+        }
         
-        num_topics = inputs.get_value_data("num_topics")
-        
-        passes = inputs.get_value_data("passes")
-        chunksize = inputs.get_value_data("chunksize")
-        iterations = inputs.get_value_data("iterations")
-        random_state = inputs.get_value_data("random_state")
+
+        lda_kwargs = {k: v for k, v in input_values.items() if v is not None}
+
+        id2word_kwargs = {
+            k: v for k, v in {
+                'no_above': inputs.get_value_data("no_above"),
+                'no_below': inputs.get_value_data("no_below")
+            }.items() if v is not None
+        }
+
+
+        def convert_numpy_types(obj):
+            if isinstance(obj, np.number):
+                return obj.item()
+            elif isinstance(obj, (list, tuple)):
+                return type(obj)(convert_numpy_types(item) for item in obj)
+            elif isinstance(obj, dict):
+                return {key: convert_numpy_types(value) for key, value in obj.items()}
+            return obj
 
         try:
+            # Create dictionary
             id2word = corpora.Dictionary(tokens_list)
-        except Exception as e:
-            raise KiaraProcessingException(
-                f"Failed to create dictionary: {e}"
-            )
 
-        if not no_below == False:
-            try:
-                id2word.filter_extremes(no_below=no_below)
-            except Exception as e:
-                raise KiaraProcessingException(
-                    f"Failed to filter extremes with no_below value: {e}"
-                )
+            # Apply filters if any parameters are provided
+            if id2word_kwargs:
+                id2word.filter_extremes(**id2word_kwargs)
 
-        if not no_above == False:
-            try:
-                id2word.filter_extremes(no_above=no_above)
-            except Exception as e:
-                raise KiaraProcessingException(
-                    f"Failed to filter extremes with no_above value: {e}"
-                )
-            id2word.filter_extremes(no_above=no_above)
-
-        try:
+            # Create corpus
             corpus = [id2word.doc2bow(text) for text in tokens_list]
-        except Exception as e:
-            raise KiaraProcessingException(
-                f"Failed to create doc2bow: {e}"
+
+            # Create and train model
+            model = gensim.models.ldamulticore.LdaMulticore(
+                corpus, 
+                id2word=id2word, 
+                **lda_kwargs
             )
-        
-        try:
-            model = gensim.models.ldamulticore.LdaMulticore(corpus, id2word=id2word, num_topics=num_topics, random_state=random_state, passes=passes, chunksize=chunksize, iterations=iterations)
+
+            # Get outputs and convert numpy types
+            topics = convert_numpy_types(model.print_topics(num_words=30))
+            common_words = convert_numpy_types(id2word.most_common(15))
+
+            # Set outputs
+            outputs.set_value("topics", topics)
+            outputs.set_value("most_common_words", common_words)
+
         except Exception as e:
-            raise KiaraProcessingException(
-                f"Failed to run LDA: {e}"
-            )
-        
-        outputs.set_value("topics", model.print_topics(num_words=30))
-        outputs.set_value("most_common_words", id2word.most_common(15))
+            raise KiaraProcessingException(f"Processing failed: {e}")
 
 
 class RunLdaCoherence(KiaraModule):
