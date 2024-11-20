@@ -151,13 +151,11 @@ class RunLdaCoherence(KiaraModule):
                 "type": "integer",
                 "doc": "Remove tokens that appear in less than no_below documents.",
                 "optional": True,
-                "default": False
             },
             "no_above": {
                 "type": "integer",
                 "doc": "Remove tokens that appear in more than no_above documents.",
                 "optional": True,
-                "default": False
             },
             "num_topics": {
                 "type": "integer",
@@ -168,25 +166,21 @@ class RunLdaCoherence(KiaraModule):
                 "type": "integer",
                 "doc": "Number of passes.",
                 "optional": True,
-                "default": False
             },
             "chunksize": {
                 "type": "integer",
                 "doc": "Chunksize.",
                 "optional": True,
-                "default": False
             },
              "iterations": {
                 "type": "integer",
                 "doc": "Number of iterations.",
                 "optional": True,
-                "default": False
             },
              "random_state": {
                 "type": "integer",
                 "doc": "Random state.",
                 "optional": True,
-                "default": False
             },
             "minimum_probability": {
                 "type": "float",
@@ -234,97 +228,60 @@ class RunLdaCoherence(KiaraModule):
         from gensim import corpora # type: ignore
         import numpy as np  # type: ignore
 
-        tokens_array = inputs.get_value_data("tokens_array")
-        tokens_array_pa = tokens_array.arrow_array
-        tokens_list = tokens_array_pa.to_pylist()
+        input_values = {
+            "passes": inputs.get_value_data("passes"),
+            "chunksize": inputs.get_value_data("chunksize"),
+            "iterations": inputs.get_value_data("iterations"),
+            "random_state": inputs.get_value_data("random_state"),
+            "num_topics": inputs.get_value_data("num_topics"),
+            "minimum_probability": inputs.get_value_data("minimum_probability"),
+            "gamma_threshold": inputs.get_value_data("gamma_threshold")
+        }
         
-        no_below = inputs.get_value_data("no_below")
-        no_above = inputs.get_value_data("no_above")
+        lda_kwargs = {k: v for k, v in input_values.items() if v is not None}
         
-        num_topics = inputs.get_value_data("num_topics")
-        
-        passes = inputs.get_value_data("passes")
-        chunksize = inputs.get_value_data("chunksize")
-        iterations = inputs.get_value_data("iterations")
-        random_state = inputs.get_value_data("random_state")
-
-        minimum_probability = inputs.get_value_data("minimum_probability")
-        alpha = inputs.get_value_data("alpha")
-        eta = inputs.get_value_data("eta")
-        gamma_threshold = inputs.get_value_data("gamma_threshold")
-
-
-        # optional arguments for LDA
-        lda_kwargs = {}
-        if num_topics is not None:
-            lda_kwargs['num_topics'] = num_topics
-        if minimum_probability is not None:
-            lda_kwargs['minimum_probability'] = minimum_probability
-        if alpha is not None:
+        if inputs.get_value_data("alpha"):
             lda_kwargs['alpha'] = "auto"
-        if eta is not None:
+        if inputs.get_value_data("eta"):
             lda_kwargs['eta'] = "auto"
-        if gamma_threshold is not None:
-            lda_kwargs['gamma_threshold'] = gamma_threshold
+
+        id2word_kwargs = {
+            k: v for k, v in {
+                'no_above': inputs.get_value_data("no_above"),
+                'no_below': inputs.get_value_data("no_below")
+            }.items() if v is not None
+        }
+
+        tokens_array = inputs.get_value_data("tokens_array")
+        tokens_list = tokens_array.arrow_array.to_pylist()
 
         try:
             id2word = corpora.Dictionary(tokens_list)
-        except Exception as e:
-            raise KiaraProcessingException(
-                f"Failed to create dictionary: {e}"
-            )
-
-        if not no_below == False:
-            try:
-                id2word.filter_extremes(no_below=no_below)
-            except Exception as e:
-                raise KiaraProcessingException(
-                    f"Failed to filter extremes with no_below value: {e}"
-                )
-
-        if not no_above == False:
-            try:
-                id2word.filter_extremes(no_above=no_above)
-            except Exception as e:
-                raise KiaraProcessingException(
-                    f"Failed to filter extremes with no_above value: {e}"
-                )
-            id2word.filter_extremes(no_above=no_above)
-
-        try:
+            if id2word_kwargs:
+                id2word.filter_extremes(**id2word_kwargs)
+                
             corpus = [id2word.doc2bow(text) for text in tokens_list]
+            model = gensim.models.ldamodel.LdaModel(corpus, id2word=id2word, **lda_kwargs)
+            
+            def convert_numpy_types(obj):
+                if isinstance(obj, np.number):  # Handles all numpy numeric types
+                    return obj.item()  # Convert to native Python type
+                elif isinstance(obj, (list, tuple)):
+                    return type(obj)(convert_numpy_types(item) for item in obj)
+                elif isinstance(obj, dict):
+                    return {key: convert_numpy_types(value) for key, value in obj.items()}
+                return obj
+            
+
+            top_topics = convert_numpy_types(list(model.top_topics(corpus=corpus)))
+            print_topics = convert_numpy_types(model.print_topics(num_words=30))
+            common_words = convert_numpy_types(id2word.most_common(15))
+
+
+            outputs.set_value("print_topics", print_topics)
+            outputs.set_value("most_common_words", common_words)
+            outputs.set_value("top_topics", top_topics)
+            
+            
         except Exception as e:
-            raise KiaraProcessingException(
-                f"Failed to create doc2bow: {e}"
-            )
-        
-        
-        try:
-            model = gensim.models.ldamodel.LdaModel(corpus, id2word=id2word, alpha='auto', eta="auto", random_state=random_state, passes=passes, chunksize=chunksize, iterations=iterations)
-        except Exception as e:
-            raise KiaraProcessingException(
-                f"Failed to run LDA: {e}"
-            )
-        
-        # kiara does not accept the numpy floats that gensim returns
-        def convert_numpy_floats(obj):
-            if isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, (list, tuple)):
-                return type(obj)(convert_numpy_floats(item) for item in obj)
-            elif isinstance(obj, dict):
-                return {key: convert_numpy_floats(value) for key, value in obj.items()}
-            return obj
-        
-        try:
-            top_topics = list(model.top_topics(corpus=corpus))
-            top_topics_json_safe = convert_numpy_floats(top_topics)
-        
-        except Exception as e:
-            raise KiaraProcessingException(
-                f"Failed to get top topics: {e}"
-            )
-    
-        outputs.set_value("topics", model.print_topics(num_words=30))
-        outputs.set_value("most_common_words", id2word.most_common(15))
-        outputs.set_value("top_topics", top_topics_json_safe)
+            raise KiaraProcessingException(f"Processing failed: {e}")
