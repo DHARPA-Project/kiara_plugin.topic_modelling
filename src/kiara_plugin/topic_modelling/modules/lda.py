@@ -94,15 +94,6 @@ class RunLda(KiaraModule):
         }
 
 
-        def convert_numpy_types(obj):
-            if isinstance(obj, np.number):
-                return obj.item()
-            elif isinstance(obj, (list, tuple)):
-                return type(obj)(convert_numpy_types(item) for item in obj)
-            elif isinstance(obj, dict):
-                return {key: convert_numpy_types(value) for key, value in obj.items()}
-            return obj
-
         try:
             # Create dictionary
             id2word = corpora.Dictionary(tokens_list)
@@ -121,9 +112,15 @@ class RunLda(KiaraModule):
                 **lda_kwargs
             )
 
-            # Get outputs and convert numpy types
-            topics = convert_numpy_types(model.print_topics(num_words=30))
-            common_words = convert_numpy_types(id2word.most_common(15))
+            # Get raw topics and convert them
+            raw_topics = model.print_topics(num_words=30)
+            topics = []
+            for idx, topic in raw_topics:
+                # Convert any numpy types in the index and ensure topic is a string
+                topics.append((int(idx), str(topic)))
+
+            # Convert common words with explicit type conversion
+            common_words = [(str(word), int(count)) for word, count in id2word.most_common(15)]
 
             # Set outputs
             outputs.set_value("topics", topics)
@@ -262,25 +259,33 @@ class RunLdaCoherence(KiaraModule):
                 
             corpus = [id2word.doc2bow(text) for text in tokens_list]
             model = gensim.models.ldamodel.LdaModel(corpus, id2word=id2word, **lda_kwargs)
-            
-            def convert_numpy_types(obj):
-                if isinstance(obj, np.number):  # Handles all numpy numeric types
-                    return obj.item()  # Convert to native Python type
-                elif isinstance(obj, (list, tuple)):
-                    return type(obj)(convert_numpy_types(item) for item in obj)
-                elif isinstance(obj, dict):
-                    return {key: convert_numpy_types(value) for key, value in obj.items()}
-                return obj
-            
 
-            top_topics = convert_numpy_types(list(model.top_topics(corpus=corpus)))
-            print_topics = convert_numpy_types(model.print_topics(num_words=30))
-            common_words = convert_numpy_types(id2word.most_common(15))
+          
+            raw_top_topics = model.top_topics(corpus=corpus)
+            
+            # Transform top topics into a more readable format
+            formatted_topics = []
 
+            for topic_idx, (topic_terms, coherence) in enumerate(raw_top_topics):
+                # Convert numpy.float32 to Python float in topic terms
+                converted_terms = [(float(prob), term) for prob, term in topic_terms]
+                
+                topic_dict = {
+                    'topic_id': int(topic_idx),
+                    'coherence': float(coherence),
+                    'terms': converted_terms
+                }
+                formatted_topics.append(topic_dict)
+            # Sort topics by coherence score
+            formatted_topics.sort(key=lambda x: x['coherence'], reverse=True)
+            
+            # Get other outputs
+            print_topics = [(int(idx), str(topic)) for idx, topic in model.print_topics(num_words=30)]
+            common_words = [(str(word), int(count)) for word, count in id2word.most_common(15)]
 
             outputs.set_value("print_topics", print_topics)
             outputs.set_value("most_common_words", common_words)
-            outputs.set_value("top_topics", top_topics)
+            outputs.set_value("top_topics", formatted_topics)
             
             
         except Exception as e:
