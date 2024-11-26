@@ -132,7 +132,7 @@ class RunLda(KiaraModule):
             raise KiaraProcessingException(f"Processing failed: {e}")
 
 
-class RunLdaCoherence(KiaraModule):
+class RunLdaExtendedParams(KiaraModule):
     """
     https://radimrehurek.com/gensim/models/ldamodel.html
     
@@ -203,6 +203,12 @@ class RunLdaCoherence(KiaraModule):
                 "doc": "Threshold for the gamma values.",
                 "optional": True,
             },
+            "coherence": {
+                "type": "string",
+                "doc": "Methodology to compute coherence. Possible values are 'c_v', 'u_mass', 'c_uci', 'c_npmi'.",
+                "optional": True,
+                "default": "c_npmi",
+            }
         }
 
     def create_outputs_schema(self):
@@ -226,6 +232,11 @@ class RunLdaCoherence(KiaraModule):
         import gensim  # type: ignore
         from gensim import corpora # type: ignore
         import numpy as np  # type: ignore
+
+        # check coherence method
+        coherence = inputs.get_value_data("coherence")
+        if coherence not in ["c_v", "u_mass", "c_uci", "c_npmi"]:
+            raise KiaraProcessingException(f"Invalid coherence method: {coherence}")
 
         input_values = {
             "passes": inputs.get_value_data("passes"),
@@ -263,7 +274,7 @@ class RunLdaCoherence(KiaraModule):
             model = gensim.models.ldamodel.LdaModel(corpus, id2word=id2word, **lda_kwargs)
 
           
-            raw_top_topics = model.top_topics(corpus=corpus)
+            raw_top_topics = model.top_topics(corpus=corpus, coherence=coherence)
             
             # Transform top topics into a more readable format
             formatted_topics = []
@@ -290,5 +301,153 @@ class RunLdaCoherence(KiaraModule):
             outputs.set_value("top_topics", formatted_topics)
             
             
+        except Exception as e:
+            raise KiaraProcessingException(f"Processing failed: {e}")
+
+
+
+class RunLdaCoherence(KiaraModule):
+    """
+    This module is used to run LDA with model coherence score and to compare model coherences depending on the chosen number of topics.
+    https://radimrehurek.com/gensim_3.8.3/models/coherencemodel.html
+    
+    """
+
+    _module_type_name = "topic_modelling.lda_coherence"
+
+    def create_inputs_schema(self):
+        return {
+            "tokens_array": {
+                "type": "array",
+                "doc": "Array that contains the tokens to process.",
+            },
+            "no_below": {
+                "type": "integer",
+                "doc": "Remove tokens that appear in less than no_below documents.",
+                "optional": True,
+            },
+            "no_above": {
+                "type": "integer",
+                "doc": "Remove tokens that appear in more than no_above documents.",
+                "optional": True,
+            },
+            "num_topics": {
+                "type": "integer",
+                "doc": "Number of topics to process.",
+                "optional": True,
+            },
+            "passes": {
+                "type": "integer",
+                "doc": "Number of passes.",
+                "optional": True,
+            },
+            "chunksize": {
+                "type": "integer",
+                "doc": "Chunksize.",
+                "optional": True,
+            },
+             "iterations": {
+                "type": "integer",
+                "doc": "Number of iterations.",
+                "optional": True,
+            },
+             "random_state": {
+                "type": "integer",
+                "doc": "Random state.",
+                "optional": True,
+            },
+            "range_of_number_of_topics": {
+                "type": "list",
+                "doc": "The range of number of topics to test model coherence. The coherence score will be calculated for each number of topics in the range.",
+                "optional": False,
+            },
+            "coherence": {
+                "type": "string",
+                "doc": "Methodology to compute coherence. Possible values are 'c_v', 'u_mass', 'c_uci', 'c_npmi'.",
+                "optional": True,
+                "default": "c_npmi",
+            }
+        }
+
+    def create_outputs_schema(self):
+        return {
+            "coherence": {
+                "type": "list",
+                "doc": "The 15 most common words overall."
+            },
+            "print_topics": {
+                "type": "list",
+                "doc": "A list of the topics per model."
+            }
+        }
+
+    def process(self, inputs, outputs):
+
+        import gensim  # type: ignore
+        from gensim import corpora # type: ignore
+        from gensim.models.coherencemodel import CoherenceModel # type: ignore
+        import numpy as np  # type: ignore
+
+        tokens_array = inputs.get_value_data("tokens_array")
+        tokens_list = tokens_array.arrow_array.to_pylist()
+
+        # check coherence method
+        coherence = inputs.get_value_data("coherence")
+        if coherence not in ["c_v", "u_mass", "c_uci", "c_npmi"]:
+            raise KiaraProcessingException(f"Invalid coherence method: {coherence}")
+        
+        input_values = {
+            "num_topics": inputs.get_value_data("num_topics"),
+            "passes": inputs.get_value_data("passes"),
+            "chunksize": inputs.get_value_data("chunksize"),
+            "iterations": inputs.get_value_data("iterations"),
+            "random_state": inputs.get_value_data("random_state")
+        }
+        
+
+        lda_kwargs = {k: v for k, v in input_values.items() if v is not None}
+
+        id2word_kwargs = {
+            k: v for k, v in {
+                'no_above': inputs.get_value_data("no_above"),
+                'no_below': inputs.get_value_data("no_below")
+            }.items() if v is not None
+        }
+
+
+        try:
+            # Create dictionary
+            id2word = corpora.Dictionary(tokens_list)
+
+            # Apply filters if any parameters are provided
+            if id2word_kwargs:
+                id2word.filter_extremes(**id2word_kwargs)
+
+            # Create corpus
+            corpus = [id2word.doc2bow(text) for text in tokens_list]
+
+            # Create and train model
+            model = gensim.models.ldamulticore.LdaMulticore(
+                corpus, 
+                id2word=id2word, 
+                **lda_kwargs
+            )
+
+            # Get raw topics and convert them
+            raw_topics = model.print_topics(num_words=30)
+            topics = []
+            for idx, topic in raw_topics:
+                # Convert any numpy types in the index and ensure topic is a string
+                topics.append((int(idx), str(topic)))
+
+            topics.sort(key=lambda x: x[0])
+            
+            # Convert common words with explicit type conversion
+            common_words = [(str(word), int(count)) for word, count in id2word.most_common(15)]
+
+            # Set outputs
+            outputs.set_value("print_topics", topics)
+            outputs.set_value("most_common_words", common_words)
+
         except Exception as e:
             raise KiaraProcessingException(f"Processing failed: {e}")
